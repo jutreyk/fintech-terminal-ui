@@ -43,11 +43,19 @@ export interface MarketTicker {
   volume24h: number;
 }
 
-function generateInitialCandles(count: number = 100): Candle[] {
+function generateInitialCandles(count: number = 100, tf: Timeframe = '5m'): Candle[] {
   const candles: Candle[] = [];
   let currentPrice = 62500;
   const now = Math.floor(Date.now() / 1000);
-  const intervalSeconds = 300;
+  
+  const intervals: Record<Timeframe, number> = {
+    '1m': 60,
+    '5m': 300,
+    '15m': 900,
+    '1h': 3600,
+    '1d': 86400
+  };
+  const intervalSeconds = intervals[tf] || 300;
 
   for (let i = count; i >= 0; i--) {
     const time = now - i * intervalSeconds;
@@ -72,7 +80,7 @@ export const App: React.FC = () => {
     low24h: 62940.0,
     volume24h: 28419.65
   });
-  const [candles] = useState<Candle[]>(() => generateInitialCandles(120));
+  const [candles, setCandles] = useState<Candle[]>(() => generateInitialCandles(120, '5m'));
   const [trades, setTrades] = useState<Trade[]>([]);
   const [orderBook, setOrderBook] = useState<OrderBook>({
     bids: [],
@@ -252,7 +260,10 @@ export const App: React.FC = () => {
                 <button
                   key={tf}
                   type="button"
-                  onClick={() => setTimeframe(tf)}
+                  onClick={() => {
+                    setTimeframe(tf);
+                    setCandles(generateInitialCandles(120, tf));
+                  }}
                   className={`px-2.5 py-1 rounded text-xs font-medium transition ${
                     timeframe === tf ? 'bg-canvas-panel text-white font-semibold' : 'text-slate-400 hover:text-slate-200'
                   }`}
@@ -383,7 +394,16 @@ export const App: React.FC = () => {
             </div>
             <div className="grid grid-cols-4 gap-2 text-[10px]">
               {['25%', '50%', '75%', '100%'].map(pct => (
-                <button key={pct} type="button" className="py-1 rounded bg-canvas-panel hover:bg-canvas-hover text-slate-400 transition">
+                <button
+                  key={pct}
+                  type="button"
+                  onClick={() => {
+                    const balanceBTC = 1.45;
+                    const fraction = parseInt(pct) / 100;
+                    setAmountInput((balanceBTC * fraction).toFixed(3));
+                  }}
+                  className="py-1 rounded bg-canvas-panel hover:bg-canvas-hover text-slate-400 hover:text-white transition"
+                >
                   {pct}
                 </button>
               ))}
