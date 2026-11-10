@@ -92,6 +92,14 @@ function calculatesmaoverlay(candleitems: Candle[], periodwindow: number = 20) {
 export const App: React.FC = () => {
   const [timeframe, setTimeframe] = useState<Timeframe>('5m');
   const [issmashown, setissmashown] = useState<boolean>(true);
+  const [hoveredchartdata, sethoveredchartdata] = useState<{
+    time: string;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    smaval: number | null;
+  } | null>(null);
   const [ticker, setTicker] = useState<MarketTicker>({
     symbol: 'BTC-USD',
     price: 64280.5,
@@ -174,8 +182,26 @@ export const App: React.FC = () => {
     if (!chartContainerRef.current) return;
     const chart = createChart(chartContainerRef.current, {
       layout: { background: { type: ColorType.Solid, color: '#0a0b0d' }, textColor: '#848e9c' },
-      grid: { vertLines: { color: 'rgba(35, 39, 46, 0.6)' }, horzLines: { color: 'rgba(35, 39, 46, 0.6)' } },
-      crosshair: { mode: 0 },
+      grid: { vertLines: { color: 'rgba(35, 39, 46, 0.4)' }, horzLines: { color: 'rgba(35, 39, 46, 0.4)' } },
+      crosshair: {
+        mode: 1,
+        vertLine: {
+          color: '#3b82f6',
+          width: 1,
+          style: 3,
+          visible: true,
+          labelVisible: true,
+          labelBackgroundColor: '#1e293b'
+        },
+        horzLine: {
+          color: '#3b82f6',
+          width: 1,
+          style: 3,
+          visible: true,
+          labelVisible: true,
+          labelBackgroundColor: '#1e293b'
+        }
+      },
       rightPriceScale: { borderColor: '#23272e' },
       timeScale: { borderColor: '#23272e', timeVisible: true, secondsVisible: false }
     });
@@ -196,6 +222,7 @@ export const App: React.FC = () => {
       close: c.close
     })));
 
+    let smaseriesref: any = null;
     if (issmashown) {
       const smaserieslayer = chart.addSeries(LineSeries, {
         color: '#f59e0b',
@@ -210,7 +237,33 @@ export const App: React.FC = () => {
         time: item.time as any,
         value: item.value
       })));
+      smaseriesref = smaserieslayer;
     }
+
+    chart.subscribeCrosshairMove(param => {
+      if (!param || !param.time || !param.seriesData) {
+        sethoveredchartdata(null);
+        return;
+      }
+      const candleval = param.seriesData.get(candlestickSeries) as any;
+      if (!candleval) {
+        sethoveredchartdata(null);
+        return;
+      }
+      const smaval = smaseriesref ? (param.seriesData.get(smaseriesref) as any)?.value ?? null : null;
+      const datetimestr = typeof param.time === 'number'
+        ? new Date(param.time * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        : String(param.time);
+
+      sethoveredchartdata({
+        time: datetimestr,
+        open: candleval.open,
+        high: candleval.high,
+        low: candleval.low,
+        close: candleval.close,
+        smaval: smaval !== null ? Math.round(smaval * 100) / 100 : null
+      });
+    });
 
     const handleResize = () => {
       if (chartContainerRef.current) {
@@ -323,7 +376,26 @@ export const App: React.FC = () => {
             </div>
             <div className="text-[11px] text-slate-500 font-mono">TradingView Lightweight Charts v5</div>
           </div>
-          <div ref={chartContainerRef} className="flex-1 w-full h-full relative" />
+          <div className="relative flex-1 w-full h-full">
+            <div ref={chartContainerRef} className="w-full h-full" />
+            {hoveredchartdata && (
+              <div className="absolute top-3 left-4 z-10 flex items-center gap-3 px-3 py-1.5 rounded bg-[#0e1117]/90 border border-canvas-border backdrop-blur-sm font-mono text-[11px] pointer-events-none shadow-lg">
+                <span className="text-slate-400">{hoveredchartdata.time}</span>
+                <div className="flex items-center gap-2 text-slate-300">
+                  <span>О: <span className="text-white">${hoveredchartdata.open.toFixed(1)}</span></span>
+                  <span>В: <span className="text-emerald-400">${hoveredchartdata.high.toFixed(1)}</span></span>
+                  <span>Н: <span className="text-rose-400">${hoveredchartdata.low.toFixed(1)}</span></span>
+                  <span>З: <span className={hoveredchartdata.close >= hoveredchartdata.open ? 'text-trade-up font-medium' : 'text-trade-down font-medium'}>${hoveredchartdata.close.toFixed(1)}</span></span>
+                </div>
+                {hoveredchartdata.smaval !== null && (
+                  <div className="flex items-center gap-1.5 pl-2 border-l border-canvas-border text-amber-400 font-medium">
+                    <span>SMA20:</span>
+                    <span>${hoveredchartdata.smaval.toFixed(1)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </section>
 
         <section className="w-64 flex flex-col border-r border-canvas-border bg-canvas-subtle">
