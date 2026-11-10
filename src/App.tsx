@@ -91,6 +91,7 @@ function calculatesmaoverlay(candleitems: Candle[], periodwindow: number = 20) {
 
 export const App: React.FC = () => {
   const [timeframe, setTimeframe] = useState<Timeframe>('5m');
+  const [issmashown, setissmashown] = useState<boolean>(true);
   const [ticker, setTicker] = useState<MarketTicker>({
     symbol: 'BTC-USD',
     price: 64280.5,
@@ -195,19 +196,21 @@ export const App: React.FC = () => {
       close: c.close
     })));
 
-    const smaserieslayer = chart.addSeries(LineSeries, {
-      color: '#f59e0b',
-      lineWidth: 2,
-      priceLineVisible: false,
-      lastValueVisible: true,
-      crosshairMarkerVisible: true
-    });
+    if (issmashown) {
+      const smaserieslayer = chart.addSeries(LineSeries, {
+        color: '#f59e0b',
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: true,
+        crosshairMarkerVisible: true
+      });
 
-    const calculatedsmadata = calculatesmaoverlay(candles, 20);
-    smaserieslayer.setData(calculatedsmadata.map(item => ({
-      time: item.time as any,
-      value: item.value
-    })));
+      const calculatedsmadata = calculatesmaoverlay(candles, 20);
+      smaserieslayer.setData(calculatedsmadata.map(item => ({
+        time: item.time as any,
+        value: item.value
+      })));
+    }
 
     const handleResize = () => {
       if (chartContainerRef.current) {
@@ -223,7 +226,7 @@ export const App: React.FC = () => {
       window.removeEventListener('resize', handleResize);
       chart.remove();
     };
-  }, [candles]);
+  }, [candles, issmashown]);
 
   const maxTotal = Math.max(...orderBook.bids.map(b => b.total), ...orderBook.asks.map(a => a.total), 1);
   const isPositive = ticker.change24h >= 0;
@@ -304,6 +307,19 @@ export const App: React.FC = () => {
                   {tf}
                 </button>
               ))}
+              <div className="h-4 w-px bg-canvas-border mx-2" />
+              <button
+                type="button"
+                onClick={() => setissmashown(prevval => !prevval)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono transition border ${
+                  issmashown
+                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-400 font-semibold'
+                    : 'bg-transparent border-transparent text-slate-500 hover:text-slate-300'
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${issmashown ? 'bg-amber-400' : 'bg-slate-600'}`} />
+                <span>SMA (20)</span>
+              </button>
             </div>
             <div className="text-[11px] text-slate-500 font-mono">TradingView Lightweight Charts v5</div>
           </div>
