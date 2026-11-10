@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts';
+import { createChart, ColorType, CandlestickSeries, LineSeries } from 'lightweight-charts';
 import { Activity, ShieldCheck, TrendingUp, TrendingDown } from 'lucide-react';
 
 export type Timeframe = '1m' | '5m' | '15m' | '1h' | '1d';
@@ -68,6 +68,25 @@ function generateInitialCandles(count: number = 100, tf: Timeframe = '5m'): Cand
     currentPrice = close;
   }
   return candles;
+}
+
+function calculatesmaoverlay(candleitems: Candle[], periodwindow: number = 20) {
+  const resultdataset: { time: number; value: number }[] = [];
+  let tempsumvalue = 0;
+  for (let i = 0; i < candleitems.length; i++) {
+    tempsumvalue += candleitems[i].close;
+    if (i >= periodwindow) {
+      tempsumvalue -= candleitems[i - periodwindow].close;
+    }
+    if (i >= periodwindow - 1) {
+      const avgresval = Math.round((tempsumvalue / periodwindow) * 100) / 100;
+      resultdataset.push({
+        time: candleitems[i].time,
+        value: avgresval
+      });
+    }
+  }
+  return resultdataset;
 }
 
 export const App: React.FC = () => {
@@ -174,6 +193,20 @@ export const App: React.FC = () => {
       high: c.high,
       low: c.low,
       close: c.close
+    })));
+
+    const smaserieslayer = chart.addSeries(LineSeries, {
+      color: '#f59e0b',
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      crosshairMarkerVisible: true
+    });
+
+    const calculatedsmadata = calculatesmaoverlay(candles, 20);
+    smaserieslayer.setData(calculatedsmadata.map(item => ({
+      time: item.time as any,
+      value: item.value
     })));
 
     const handleResize = () => {
