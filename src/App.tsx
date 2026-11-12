@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createChart, ColorType, CandlestickSeries, LineSeries } from 'lightweight-charts';
-import { Activity, ShieldCheck, TrendingUp, TrendingDown, ChevronDown } from 'lucide-react';
+import { Activity, ShieldCheck, TrendingUp, TrendingDown, ChevronDown, Volume2, VolumeX } from 'lucide-react';
 
 export type Timeframe = '1m' | '5m' | '15m' | '1h' | '1d';
 export type MarketSymbol = 'BTC-USD' | 'ETH-USD' | 'SOL-USD';
@@ -143,6 +143,8 @@ export const App: React.FC = () => {
   const [timeframe, setTimeframe] = useState<Timeframe>('5m');
   const [issmashown, setissmashown] = useState<boolean>(true);
   const [isdropdownopen, setisdropdownopen] = useState<boolean>(false);
+  const [isaudioenabled, setisaudioenabled] = useState<boolean>(false);
+  const [lasttradedid, setlasttradedid] = useState<string | null>(null);
   const [hoveredchartdata, sethoveredchartdata] = useState<{
     time: string;
     open: number;
@@ -151,6 +153,35 @@ export const App: React.FC = () => {
     close: number;
     smaval: number | null;
   } | null>(null);
+
+  const audiocontextref = useRef<AudioContext | null>(null);
+
+  const playtradesoundtick = (tradeside: 'buy' | 'sell') => {
+    try {
+      if (!audiocontextref.current) {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioCtx) {
+          audiocontextref.current = new AudioCtx();
+        }
+      }
+      const actx = audiocontextref.current;
+      if (!actx || actx.state === 'suspended') {
+        actx?.resume();
+      }
+      if (!actx) return;
+
+      const oscnode = actx.createOscillator();
+      const gainnode = actx.createGain();
+      oscnode.type = 'sine';
+      oscnode.frequency.setValueAtTime(tradeside === 'buy' ? 920 : 280, actx.currentTime);
+      gainnode.gain.setValueAtTime(0.035, actx.currentTime);
+      gainnode.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.04);
+      oscnode.connect(gainnode);
+      gainnode.connect(actx.destination);
+      oscnode.start();
+      oscnode.stop(actx.currentTime + 0.04);
+    } catch {}
+  };
 
   const activepair = PAIR_CONFIGS[selectedsymbol];
 
@@ -239,9 +270,15 @@ export const App: React.FC = () => {
       const s: 'buy' | 'sell' = delta >= 0 ? 'buy' : 'sell';
       const amount = Math.round((Math.random() * curcfginner.baseamount * 2 + curcfginner.baseamount * 0.1) * 1000) / 1000;
       const nowStr = new Date().toTimeString().split(' ')[0]!;
+      const newtradeid = Math.random().toString(36).slice(2, 9);
+
+      setlasttradedid(newtradeid);
+      if (isaudioenabled) {
+        playtradesoundtick(s);
+      }
 
       setTrades(prev => [
-        { id: Math.random().toString(36).slice(2, 9), time: nowStr, price: newPrice, amount, side: s },
+        { id: newtradeid, time: nowStr, price: newPrice, amount, side: s },
         ...prev.slice(0, 39)
       ]);
 
@@ -256,7 +293,7 @@ export const App: React.FC = () => {
     }, 650);
 
     return () => clearInterval(interval);
-  }, [selectedsymbol]);
+  }, [selectedsymbol, isaudioenabled]);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -570,7 +607,19 @@ export const App: React.FC = () => {
 
         <section className="w-56 flex flex-col border-r border-canvas-border bg-canvas-subtle">
           <div className="h-10 border-b border-canvas-border px-3 flex items-center justify-between text-xs font-semibold text-slate-300">
-            <span>Лента сделок</span>
+            <div className="flex items-center gap-1.5">
+              <span>Лента сделок</span>
+              <button
+                type="button"
+                onClick={() => setisaudioenabled(prev => !prev)}
+                className={`p-1 rounded transition hover:bg-canvas-panel ${
+                  isaudioenabled ? 'text-emerald-400' : 'text-slate-500 hover:text-slate-300'
+                }`}
+                title={isaudioenabled ? 'Звук сделок включен' : 'Звук сделок выключен'}
+              >
+                {isaudioenabled ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+              </button>
+            </div>
             <span className="text-[10px] text-slate-500 font-mono">Live</span>
           </div>
           <div className="grid grid-cols-3 px-3 py-1.5 text-[10px] uppercase font-mono text-slate-500 border-b border-canvas-border">
@@ -579,15 +628,23 @@ export const App: React.FC = () => {
             <span className="text-right">Время</span>
           </div>
           <div className="flex-1 overflow-y-auto font-mono text-xs p-1 space-y-[2px]">
-            {trades.map(trade => (
-              <div key={trade.id} className="grid grid-cols-3 px-2 py-0.5 hover:bg-canvas-panel">
-                <span className={trade.side === 'buy' ? 'text-trade-up font-medium' : 'text-trade-down font-medium'}>
-                  {trade.price.toFixed(activepair.pricefraction)}
-                </span>
-                <span className="text-right text-slate-300">{trade.amount.toFixed(activepair.amountfraction)}</span>
-                <span className="text-right text-slate-500 text-[11px]">{trade.time}</span>
-              </div>
-            ))}
+            {trades.map(trade => {
+              const isrecent = trade.id === lasttradedid;
+              const flashclass = isrecent
+                ? trade.side === 'buy'
+                  ? 'bg-emerald-500/25 transition-colors duration-500'
+                  : 'bg-rose-500/25 transition-colors duration-500'
+                : 'hover:bg-canvas-panel transition-colors';
+              return (
+                <div key={trade.id} className={`grid grid-cols-3 px-2 py-0.5 rounded-sm ${flashclass}`}>
+                  <span className={trade.side === 'buy' ? 'text-trade-up font-medium' : 'text-trade-down font-medium'}>
+                    {trade.price.toFixed(activepair.pricefraction)}
+                  </span>
+                  <span className="text-right text-slate-300">{trade.amount.toFixed(activepair.amountfraction)}</span>
+                  <span className="text-right text-slate-500 text-[11px]">{trade.time}</span>
+                </div>
+              );
+            })}
           </div>
         </section>
 
