@@ -1,8 +1,57 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createChart, ColorType, CandlestickSeries, LineSeries } from 'lightweight-charts';
-import { Activity, ShieldCheck, TrendingUp, TrendingDown } from 'lucide-react';
+import { Activity, ShieldCheck, TrendingUp, TrendingDown, ChevronDown } from 'lucide-react';
 
 export type Timeframe = '1m' | '5m' | '15m' | '1h' | '1d';
+export type MarketSymbol = 'BTC-USD' | 'ETH-USD' | 'SOL-USD';
+
+export interface PairConfig {
+  symbol: MarketSymbol;
+  name: string;
+  baseprice: number;
+  pricefraction: number;
+  volatility: number;
+  spreadval: number;
+  stepprice: number;
+  baseamount: number;
+  amountfraction: number;
+}
+
+export const PAIR_CONFIGS: Record<MarketSymbol, PairConfig> = {
+  'BTC-USD': {
+    symbol: 'BTC-USD',
+    name: 'Bitcoin / US Dollar',
+    baseprice: 64280.5,
+    pricefraction: 1,
+    volatility: 12,
+    spreadval: 0.5,
+    stepprice: 5,
+    baseamount: 0.05,
+    amountfraction: 3
+  },
+  'ETH-USD': {
+    symbol: 'ETH-USD',
+    name: 'Ethereum / US Dollar',
+    baseprice: 3450.2,
+    pricefraction: 2,
+    volatility: 2.5,
+    spreadval: 0.1,
+    stepprice: 0.5,
+    baseamount: 1.25,
+    amountfraction: 2
+  },
+  'SOL-USD': {
+    symbol: 'SOL-USD',
+    name: 'Solana / US Dollar',
+    baseprice: 182.4,
+    pricefraction: 2,
+    volatility: 0.45,
+    spreadval: 0.05,
+    stepprice: 0.1,
+    baseamount: 15.0,
+    amountfraction: 1
+  }
+};
 
 export interface Candle {
   time: number;
@@ -43,9 +92,9 @@ export interface MarketTicker {
   volume24h: number;
 }
 
-function generateInitialCandles(count: number = 100, tf: Timeframe = '5m'): Candle[] {
+function generateInitialCandles(count: number = 100, tf: Timeframe = '5m', startpriceval: number = 62500, spreadvol: number = 160): Candle[] {
   const candles: Candle[] = [];
-  let currentPrice = 62500;
+  let currentPrice = startpriceval;
   const now = Math.floor(Date.now() / 1000);
   
   const intervals: Record<Timeframe, number> = {
@@ -59,11 +108,11 @@ function generateInitialCandles(count: number = 100, tf: Timeframe = '5m'): Cand
 
   for (let i = count; i >= 0; i--) {
     const time = now - i * intervalSeconds;
-    const delta = (Math.random() - 0.48) * 160;
+    const delta = (Math.random() - 0.48) * spreadvol;
     const open = currentPrice;
-    const close = Math.round((open + delta) * 10) / 10;
-    const high = Math.round((Math.max(open, close) + Math.random() * 80) * 10) / 10;
-    const low = Math.round((Math.min(open, close) - Math.random() * 80) * 10) / 10;
+    const close = Math.round((open + delta) * 100) / 100;
+    const high = Math.round((Math.max(open, close) + Math.random() * (spreadvol * 0.5)) * 100) / 100;
+    const low = Math.round((Math.min(open, close) - Math.random() * (spreadvol * 0.5)) * 100) / 100;
     candles.push({ time, open, high, low, close, volume: 10 });
     currentPrice = close;
   }
@@ -90,8 +139,10 @@ function calculatesmaoverlay(candleitems: Candle[], periodwindow: number = 20) {
 }
 
 export const App: React.FC = () => {
+  const [selectedsymbol, setselectedsymbol] = useState<MarketSymbol>('BTC-USD');
   const [timeframe, setTimeframe] = useState<Timeframe>('5m');
   const [issmashown, setissmashown] = useState<boolean>(true);
+  const [isdropdownopen, setisdropdownopen] = useState<boolean>(false);
   const [hoveredchartdata, sethoveredchartdata] = useState<{
     time: string;
     open: number;
@@ -100,44 +151,71 @@ export const App: React.FC = () => {
     close: number;
     smaval: number | null;
   } | null>(null);
+
+  const activepair = PAIR_CONFIGS[selectedsymbol];
+
   const [ticker, setTicker] = useState<MarketTicker>({
-    symbol: 'BTC-USD',
-    price: 64280.5,
+    symbol: activepair.symbol,
+    price: activepair.baseprice,
     change24h: 3.42,
-    high24h: 65120.0,
-    low24h: 62940.0,
+    high24h: Math.round(activepair.baseprice * 1.018 * 100) / 100,
+    low24h: Math.round(activepair.baseprice * 0.982 * 100) / 100,
     volume24h: 28419.65
   });
-  const [candles, setCandles] = useState<Candle[]>(() => generateInitialCandles(120, '5m'));
+  const [candles, setCandles] = useState<Candle[]>(() =>
+    generateInitialCandles(120, '5m', activepair.baseprice, activepair.baseprice * 0.005)
+  );
   const [trades, setTrades] = useState<Trade[]>([]);
   const [orderBook, setOrderBook] = useState<OrderBook>({
     bids: [],
     asks: [],
-    lastPrice: 64280.5,
-    spread: 0.5
+    lastPrice: activepair.baseprice,
+    spread: activepair.spreadval
   });
 
   const [side, setSide] = useState<'buy' | 'sell'>('buy');
   const [orderType, setOrderType] = useState<'limit' | 'market'>('limit');
-  const [priceInput, setPriceInput] = useState<string>('64280.5');
-  const [amountInput, setAmountInput] = useState<string>('0.05');
+  const [priceInput, setPriceInput] = useState<string>(activepair.baseprice.toString());
+  const [amountInput, setAmountInput] = useState<string>(activepair.baseamount.toString());
 
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  const priceRef = useRef(ticker.price);
+  const priceRef = useRef(activepair.baseprice);
 
   useEffect(() => {
+    const curpair = PAIR_CONFIGS[selectedsymbol];
+    priceRef.current = curpair.baseprice;
+    setPriceInput(curpair.baseprice.toString());
+    setAmountInput(curpair.baseamount.toString());
+    setTicker({
+      symbol: curpair.symbol,
+      price: curpair.baseprice,
+      change24h: selectedsymbol === 'BTC-USD' ? 3.42 : selectedsymbol === 'ETH-USD' ? 1.85 : -2.14,
+      high24h: Math.round(curpair.baseprice * 1.018 * 100) / 100,
+      low24h: Math.round(curpair.baseprice * 0.982 * 100) / 100,
+      volume24h: selectedsymbol === 'BTC-USD' ? 28419.65 : selectedsymbol === 'ETH-USD' ? 142050.8 : 893420.0
+    });
+    setCandles(generateInitialCandles(120, timeframe, curpair.baseprice, curpair.baseprice * 0.005));
+    setTrades([]);
+  }, [selectedsymbol]);
+
+  useEffect(() => {
+    const curcfg = PAIR_CONFIGS[selectedsymbol];
     const genBook = (basePrice: number): OrderBook => {
       const bids: OrderBookLevel[] = [];
       const asks: OrderBookLevel[] = [];
       let bTotal = 0;
       let aTotal = 0;
+      const stepval = curcfg.stepprice;
+      const decplaces = curcfg.pricefraction;
       for (let i = 1; i <= 14; i++) {
-        const bPrice = Math.round((basePrice - i * 5) * 10) / 10;
+        const rawbprice = basePrice - i * stepval;
+        const bPrice = Number(rawbprice.toFixed(decplaces));
         const bSize = Math.round((Math.random() * 1.5 + 0.1) * 1000) / 1000;
         bTotal += bSize;
         bids.push({ price: bPrice, size: bSize, total: Math.round(bTotal * 1000) / 1000 });
 
-        const aPrice = Math.round((basePrice + i * 5) * 10) / 10;
+        const rawaprice = basePrice + i * stepval;
+        const aPrice = Number(rawaprice.toFixed(decplaces));
         const aSize = Math.round((Math.random() * 1.5 + 0.1) * 1000) / 1000;
         aTotal += aSize;
         asks.push({ price: aPrice, size: aSize, total: Math.round(aTotal * 1000) / 1000 });
@@ -146,18 +224,20 @@ export const App: React.FC = () => {
         bids,
         asks,
         lastPrice: basePrice,
-        spread: Math.round((asks[0].price - bids[0].price) * 10) / 10
+        spread: Number((asks[0].price - bids[0].price).toFixed(decplaces))
       };
     };
 
     setOrderBook(genBook(priceRef.current));
 
     const interval = setInterval(() => {
-      const delta = (Math.random() - 0.49) * 12;
-      const newPrice = Math.round((priceRef.current + delta) * 10) / 10;
+      const curcfginner = PAIR_CONFIGS[selectedsymbol];
+      const delta = (Math.random() - 0.49) * curcfginner.volatility;
+      const decdigits = curcfginner.pricefraction;
+      const newPrice = Number((priceRef.current + delta).toFixed(decdigits));
       priceRef.current = newPrice;
       const s: 'buy' | 'sell' = delta >= 0 ? 'buy' : 'sell';
-      const amount = Math.round((Math.random() * 0.85 + 0.02) * 1000) / 1000;
+      const amount = Math.round((Math.random() * curcfginner.baseamount * 2 + curcfginner.baseamount * 0.1) * 1000) / 1000;
       const nowStr = new Date().toTimeString().split(' ')[0]!;
 
       setTrades(prev => [
@@ -176,7 +256,7 @@ export const App: React.FC = () => {
     }, 650);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedsymbol]);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -293,12 +373,41 @@ export const App: React.FC = () => {
             <div className="w-8 h-8 rounded-full bg-coinbase-blue flex items-center justify-center font-bold text-white text-xs">
               C
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold text-sm text-white">{ticker.symbol}</span>
-                <span className="px-1.5 py-0.5 rounded text-[10px] bg-canvas-panel text-slate-400 font-mono">Spot</span>
-              </div>
-              <span className="text-[11px] text-slate-500">Bitcoin / US Dollar</span>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setisdropdownopen(prev => !prev)}
+                className="flex items-center gap-2 hover:bg-canvas-panel px-2 py-1 rounded transition text-left"
+              >
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-semibold text-sm text-white">{ticker.symbol}</span>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-canvas-panel text-slate-400 font-mono">Spot</span>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                  </div>
+                  <span className="text-[11px] text-slate-500">{activepair.name}</span>
+                </div>
+              </button>
+              {isdropdownopen && (
+                <div className="absolute top-full left-0 mt-1 w-48 bg-[#0e1117] border border-canvas-border rounded shadow-2xl py-1 z-50">
+                  {(Object.keys(PAIR_CONFIGS) as MarketSymbol[]).map(sym => (
+                    <button
+                      key={sym}
+                      type="button"
+                      onClick={() => {
+                        setselectedsymbol(sym);
+                        setisdropdownopen(false);
+                      }}
+                      className={`w-full px-3 py-2 text-left flex items-center justify-between text-xs hover:bg-canvas-panel transition ${
+                        selectedsymbol === sym ? 'bg-canvas-panel font-semibold text-white' : 'text-slate-300'
+                      }`}
+                    >
+                      <span>{sym}</span>
+                      <span className="text-[10px] text-slate-500 font-mono">${PAIR_CONFIGS[sym].baseprice.toLocaleString('en-US')}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="h-6 w-px bg-canvas-border" />
@@ -401,7 +510,7 @@ export const App: React.FC = () => {
         <section className="w-64 flex flex-col border-r border-canvas-border bg-canvas-subtle">
           <div className="h-10 border-b border-canvas-border px-3 flex items-center justify-between text-xs font-semibold text-slate-300">
             <span>Биржевой стакан</span>
-            <span className="text-[10px] text-slate-500 font-mono">BTC / USD</span>
+            <span className="text-[10px] text-slate-500 font-mono">{selectedsymbol}</span>
           </div>
           <div className="grid grid-cols-3 px-3 py-1.5 text-[10px] uppercase font-mono text-slate-500 border-b border-canvas-border">
             <span>Цена</span>
@@ -412,22 +521,22 @@ export const App: React.FC = () => {
             {orderBook.asks.slice(0, 8).reverse().map((ask, idx) => (
               <div key={idx} className="relative grid grid-cols-3 px-2 py-0.5 hover:bg-canvas-panel cursor-pointer">
                 <div className="absolute inset-y-0 right-0 bg-trade-downBg pointer-events-none" style={{ width: `${Math.min((ask.total / maxTotal) * 100, 100)}%` }} />
-                <span className="relative text-trade-down font-medium">{ask.price.toFixed(1)}</span>
-                <span className="relative text-right text-slate-300">{ask.size.toFixed(3)}</span>
+                <span className="relative text-trade-down font-medium">{ask.price.toFixed(activepair.pricefraction)}</span>
+                <span className="relative text-right text-slate-300">{ask.size.toFixed(activepair.amountfraction)}</span>
                 <span className="relative text-right text-slate-500">{ask.total.toFixed(2)}</span>
               </div>
             ))}
           </div>
           <div className="h-9 border-y border-canvas-border bg-canvas-panel px-3 flex items-center justify-between font-mono">
-            <span className="text-sm font-bold text-white">${orderBook.lastPrice.toLocaleString('en-US', { minimumFractionDigits: 1 })}</span>
-            <span className="text-[11px] text-slate-400">Спред: <span className="text-slate-200">{orderBook.spread.toFixed(1)}</span></span>
+            <span className="text-sm font-bold text-white">${orderBook.lastPrice.toLocaleString('en-US', { minimumFractionDigits: activepair.pricefraction })}</span>
+            <span className="text-[11px] text-slate-400">Спред: <span className="text-slate-200">{orderBook.spread.toFixed(activepair.pricefraction)}</span></span>
           </div>
           <div className="flex-1 overflow-hidden space-y-[2px] p-1 font-mono text-xs">
             {orderBook.bids.slice(0, 8).map((bid, idx) => (
               <div key={idx} className="relative grid grid-cols-3 px-2 py-0.5 hover:bg-canvas-panel cursor-pointer">
                 <div className="absolute inset-y-0 right-0 bg-trade-upBg pointer-events-none" style={{ width: `${Math.min((bid.total / maxTotal) * 100, 100)}%` }} />
-                <span className="relative text-trade-up font-medium">{bid.price.toFixed(1)}</span>
-                <span className="relative text-right text-slate-300">{bid.size.toFixed(3)}</span>
+                <span className="relative text-trade-up font-medium">{bid.price.toFixed(activepair.pricefraction)}</span>
+                <span className="relative text-right text-slate-300">{bid.size.toFixed(activepair.amountfraction)}</span>
                 <span className="relative text-right text-slate-500">{bid.total.toFixed(2)}</span>
               </div>
             ))}
@@ -448,9 +557,9 @@ export const App: React.FC = () => {
             {trades.map(trade => (
               <div key={trade.id} className="grid grid-cols-3 px-2 py-0.5 hover:bg-canvas-panel">
                 <span className={trade.side === 'buy' ? 'text-trade-up font-medium' : 'text-trade-down font-medium'}>
-                  {trade.price.toFixed(1)}
+                  {trade.price.toFixed(activepair.pricefraction)}
                 </span>
-                <span className="text-right text-slate-300">{trade.amount.toFixed(3)}</span>
+                <span className="text-right text-slate-300">{trade.amount.toFixed(activepair.amountfraction)}</span>
                 <span className="text-right text-slate-500 text-[11px]">{trade.time}</span>
               </div>
             ))}
@@ -464,14 +573,14 @@ export const App: React.FC = () => {
               onClick={() => setSide('buy')}
               className={`flex-1 py-1.5 text-xs font-semibold rounded transition ${side === 'buy' ? 'bg-trade-up text-black' : 'text-slate-400 hover:text-white'}`}
             >
-              Купить BTC
+              Купить {selectedsymbol.split('-')[0]}
             </button>
             <button
               type="button"
               onClick={() => setSide('sell')}
               className={`flex-1 py-1.5 text-xs font-semibold rounded transition ${side === 'sell' ? 'bg-trade-down text-white' : 'text-slate-400 hover:text-white'}`}
             >
-              Продать BTC
+              Продать {selectedsymbol.split('-')[0]}
             </button>
           </div>
 
@@ -505,7 +614,7 @@ export const App: React.FC = () => {
               </div>
             )}
             <div>
-              <label className="block text-slate-400 mb-1 text-[11px] uppercase">Количество (BTC)</label>
+              <label className="block text-slate-400 mb-1 text-[11px] uppercase">Количество ({selectedsymbol.split('-')[0]})</label>
               <input
                 type="text"
                 value={amountInput}
@@ -519,9 +628,9 @@ export const App: React.FC = () => {
                   key={pct}
                   type="button"
                   onClick={() => {
-                    const balanceBTC = 1.45;
+                    const balanceCrypto = selectedsymbol === 'BTC-USD' ? 1.45 : selectedsymbol === 'ETH-USD' ? 12.8 : 95.0;
                     const fraction = parseInt(pct) / 100;
-                    setAmountInput((balanceBTC * fraction).toFixed(3));
+                    setAmountInput((balanceCrypto * fraction).toFixed(activepair.amountfraction));
                   }}
                   className="py-1 rounded bg-canvas-panel hover:bg-canvas-hover text-slate-400 hover:text-white transition"
                 >
