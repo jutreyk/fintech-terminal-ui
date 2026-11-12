@@ -541,12 +541,12 @@ export const App: React.FC = () => {
             <span className="text-sm font-bold text-white">${orderBook.lastPrice.toLocaleString('en-US', { minimumFractionDigits: activepair.pricefraction })}</span>
             <span className="text-[11px] text-slate-400">Спред: <span className="text-slate-200">{orderBook.spread.toFixed(activepair.pricefraction)}</span></span>
           </div>
-          <div className="px-3 py-1 border-b border-canvas-border bg-[#0a0b0d]">
+          <div className="px-3 py-1.5 border-b border-canvas-border bg-[#0a0b0d]">
             <div className="flex justify-between items-center text-[10px] font-mono text-slate-400 mb-1">
-              <span className="text-trade-up font-medium">{bidimbalanceratio}% Bids</span>
-              <span className="text-trade-down font-medium">{askimbalanceratio}% Asks</span>
+              <span className="text-trade-up font-semibold">{bidimbalanceratio}% Bids</span>
+              <span className="text-trade-down font-semibold">{askimbalanceratio}% Asks</span>
             </div>
-            <div className="w-full h-1 bg-[#1a1d24] rounded-full overflow-hidden flex">
+            <div className="w-full h-1.5 bg-[#161a22] rounded-full overflow-hidden flex">
               <div className="bg-trade-up h-full transition-all duration-300" style={{ width: `${bidimbalanceratio}%` }} />
               <div className="bg-trade-down h-full transition-all duration-300" style={{ width: `${askimbalanceratio}%` }} />
             </div>
