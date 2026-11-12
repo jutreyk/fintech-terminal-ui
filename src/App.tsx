@@ -173,13 +173,13 @@ export const App: React.FC = () => {
       const oscnode = actx.createOscillator();
       const gainnode = actx.createGain();
       oscnode.type = 'sine';
-      oscnode.frequency.setValueAtTime(tradeside === 'buy' ? 880 : 320, actx.currentTime);
-      gainnode.gain.setValueAtTime(0.04, actx.currentTime);
-      gainnode.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.05);
+      oscnode.frequency.setValueAtTime(tradeside === 'buy' ? 920 : 280, actx.currentTime);
+      gainnode.gain.setValueAtTime(0.035, actx.currentTime);
+      gainnode.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.04);
       oscnode.connect(gainnode);
       gainnode.connect(actx.destination);
       oscnode.start();
-      oscnode.stop(actx.currentTime + 0.05);
+      oscnode.stop(actx.currentTime + 0.04);
     } catch {}
   };
 
