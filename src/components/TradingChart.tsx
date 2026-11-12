@@ -140,7 +140,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     <section className="flex-1 flex flex-col bg-canvas border-r border-canvas-border overflow-hidden">
       <div className="h-10 border-b border-canvas-border px-4 flex items-center justify-between text-xs">
         <div className="flex items-center gap-1">
-          <span className="text-slate-500 mr-2 text-[11px] uppercase">Интервал:</span>
+          <span className="text-slate-500 mr-2 text-[11px] uppercase tracking-wider">Интервал:</span>
           {(['1m', '5m', '15m', '1h', '1d'] as Timeframe[]).map(tf => (
             <button
               key={tf}
